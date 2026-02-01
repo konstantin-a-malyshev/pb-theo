@@ -2,7 +2,9 @@
 #include "sqlite3.h"
 #include "curl/curl.h"
 #include <math.h>
+#include <string>
 #include "json-c/json.h"
+#include "theo_server.h"
 
 
 // e:\system\profiles\default\config\books.db
@@ -10,7 +12,6 @@
 #define DB_FILE USERDATA TEMPDIR "/demo07.sqlite3"
 
 #define BOOKS_DB_FILE "/mnt/ext1/system/profiles/default/config/books.db"
-
 
 static ifont *font;
 static const int kFontSize = 16;
@@ -25,6 +26,104 @@ static void log_message(const char *msg)
 	PartialUpdate(0, y_log, ScreenWidth(), y_log + kFontSize + 2);
 	y_log += kFontSize + 10;
 }
+
+static size_t theo_server_health_check_callback(char *ptr, size_t size, size_t nmemb, void *userdata)
+{
+	// Warning: the received data it not NUL-terminated
+	char buffer[1024];
+
+	int data_size = size * nmemb;
+	snprintf(buffer, sizeof(buffer), "  Data %d bytes : %.128s", data_size, ptr);
+	log_message(buffer);
+
+	// Even if we didn't display everything, we signal the system we used all received data
+	return data_size;
+}
+
+static void theo_server_health_check()
+{
+	char buffer[2048];
+
+	log_message("Checking Theo Server health...");
+
+	CURL *curl = curl_easy_init();
+	if (!curl) {
+		log_message("Failed initializing curl");
+		return;
+	}
+
+    std::string url = std::string(THEO_SERVER_API_URL) + "/healthz";
+
+    log_message("Health check URL:");
+    log_message(url.c_str());
+
+	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, theo_server_health_check_callback);
+
+	CURLcode res = curl_easy_perform(curl);
+	if (res != CURLE_OK) {
+		snprintf(buffer, sizeof(buffer), "Error %d : %s", res, curl_easy_strerror(res));
+		log_message(buffer);
+
+		goto end;
+	}
+
+	end:
+	curl_easy_cleanup(curl);
+
+	log_message("Theo server health checked.");
+}
+
+static size_t theo_server_get_max_import_index_callback(char *ptr, size_t size, size_t nmemb, void *userdata)
+{
+	// Warning: the received data it not NUL-terminated
+	char buffer[1024];
+
+	int data_size = size * nmemb;
+	snprintf(buffer, sizeof(buffer), "  Data %d bytes : %.128s", data_size, ptr);
+	log_message(buffer);
+
+	// Even if we didn't display everything, we signal the system we used all received data
+	return data_size;
+}
+
+static void theo_server_get_max_import_index()
+{
+	char buffer[2048];
+
+	log_message("Getting Theo Server max import index...");
+
+	CURL *curl = curl_easy_init();
+	if (!curl) {
+		log_message("Failed initializing curl");
+		return;
+	}
+
+    std::string url = std::string(THEO_SERVER_API_URL) + "/v1/quotations/import-index/max";
+    log_message("Theo Server get max import index URL:");
+    log_message(url.c_str());
+
+	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, theo_server_get_max_import_index_callback);
+
+	CURLcode res = curl_easy_perform(curl);
+	if (res != CURLE_OK) {
+		snprintf(buffer, sizeof(buffer), "Error %d : %s", res, curl_easy_strerror(res));
+		log_message(buffer);
+
+		goto end;
+	}
+
+	end:
+	curl_easy_cleanup(curl);
+
+	log_message("Theo Server max index received.");
+}
+
 
 static void json_01()
 {
@@ -222,14 +321,16 @@ static int main_handler(int event_type, int param_one, int param_two)
 			return 1;
 		}
 		else if (param_one == IV_KEY_NEXT) {
-            log_message("Starting...");
 			//*
 			if (step == 0) {
+                theo_server_health_check();
 				// database_01();
                 // http_request_03();
-                json_01();
-                json_02();
-			}
+                // json_01();
+                // json_02();
+			} else if (step == 1) {
+                theo_server_get_max_import_index();
+            }
 			else {
 				CloseApp();
 			}

@@ -71,3 +71,6 @@ compile_commands.json
 
 # VSCode files
 .vscode/
+
+# Project files
+theo_server.h

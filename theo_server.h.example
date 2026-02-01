@@ -1,0 +1,2 @@
+#define THEO_SERVER_API_URL "http://localhost:8000/"
+#define THEO_SERVER_API_KEY "change-me"
