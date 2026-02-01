@@ -2,6 +2,7 @@
 #include "sqlite3.h"
 #include "curl/curl.h"
 #include <math.h>
+#include "json-c/json.h"
 
 
 // e:\system\profiles\default\config\books.db
@@ -23,6 +24,69 @@ static void log_message(const char *msg)
 	DrawTextRect(0, y_log, ScreenWidth(), kFontSize, msg, ALIGN_LEFT);
 	PartialUpdate(0, y_log, ScreenWidth(), y_log + kFontSize + 2);
 	y_log += kFontSize + 10;
+}
+
+static void json_01()
+{
+	char buffer[2048];
+
+	const char *json_string = "{\"a_string\":\"plop!\",\"my_int\":123}";
+	log_message(json_string);
+
+	json_object *obj = json_tokener_parse(json_string);
+
+	snprintf(buffer, sizeof(buffer), "type=%d (%s)", json_object_get_type(obj), json_type_to_name(json_object_get_type(obj)));
+	log_message(buffer);
+
+	if (json_object_get_type(obj) == json_type_object) {
+		json_object_object_foreach(obj, key, val) {
+			json_type type = json_object_get_type(val);
+			if (type == json_type_int) {
+				snprintf(buffer, sizeof(buffer), "  > %s :: type=%d (%s) -> %d", key, type, json_type_to_name(type), json_object_get_int(val));
+			}
+			else if (type == json_type_string) {
+				snprintf(buffer, sizeof(buffer), "  > %s :: type=%d (%s) -> %s", key, type, json_type_to_name(type), json_object_get_string(val));
+			}
+			// ... here, deal with the other types of data ; including array and object (recursive ;-) )
+			log_message(buffer);
+		}
+	}
+}
+
+// Serialize some C/C++ data structures to JSON
+static void json_02()
+{
+	log_message("Serializing C/C++ data structures to JSON...");
+
+	const char *json_string;
+	json_object *obj, *sub_obj1;
+
+	// Empty object: {}
+	obj = json_object_new_object();
+	json_string = json_object_to_json_string(obj);
+	free(obj);
+	log_message(json_string);
+	free((void *)json_string);
+
+	// Very simple object: {"my_int":123,"a_string":"Plop!"}
+	obj = json_object_new_object();
+	json_object_object_add(obj, "my_int", json_object_new_int(123));
+	json_object_object_add(obj, "a_string", json_object_new_string("Plop!"));
+	json_string = json_object_to_json_string(obj);
+	free(obj);
+	log_message(json_string);
+	free((void *)json_string);
+
+	// An array that contains an object and an integer: [{"key":"some val"},123456]
+	obj = json_object_new_array();
+	sub_obj1 = json_object_new_object();
+	json_object_object_add(sub_obj1, "key", json_object_new_string("some val"));
+	json_object_array_add(obj, sub_obj1);
+	json_object_array_add(obj, json_object_new_int(123456));
+	json_string = json_object_to_json_string(obj);
+	free(obj);
+	log_message(json_string);
+	free((void *)json_string);
 }
 
 static size_t curl_03_header_callback(char *ptr, size_t size, size_t nitems, void *userdata)
@@ -161,8 +225,10 @@ static int main_handler(int event_type, int param_one, int param_two)
             log_message("Starting...");
 			//*
 			if (step == 0) {
-				database_01();
-                http_request_03();
+				// database_01();
+                // http_request_03();
+                json_01();
+                json_02();
 			}
 			else {
 				CloseApp();

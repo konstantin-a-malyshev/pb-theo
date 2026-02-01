@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
+project(PBTheoProject)
 
 # Where to build the targets
 set(CMAKE_BINARY_DIR ${CMAKE_SOURCE_DIR}/build)
@@ -20,4 +21,4 @@ include_directories("${FREETYPE_INCLUDE_DIRS}")
 
 # Start you CMakeLists.txt here...
 add_executable(demo demo.cpp)
-target_link_libraries(demo inkview sqlite3 curl)
+target_link_libraries(demo inkview sqlite3 curl json-c)
