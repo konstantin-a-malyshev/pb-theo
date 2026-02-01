@@ -308,6 +308,61 @@ static void http_request_03()
 	log_message("End 3rd try (curl).");
 }
 
+static int read_quotations_callback(void *not_used, int argc, char **argv, char **col_name){
+	char buffer[128*5];
+	char row_buffer[128];
+
+    char *oid  = argv[0];
+    char *json = argv[1];
+    char *book = argv[2];
+
+    log_message(oid);
+    log_message(json);
+    log_message(book);
+
+	return 0;
+}
+
+static void read_quotations() {
+	char buffer[2048];
+
+	sqlite3 *db;
+	int result;
+	char *err_msg;
+
+	result = sqlite3_open(BOOKS_DB_FILE, &db);
+	if (result) {
+		snprintf(buffer, sizeof(buffer), "Fail opening DB: %s", sqlite3_errmsg(db));
+		log_message(buffer);
+		goto exit;
+	}
+
+    char query[512];
+    snprintf(query, sizeof query,
+        "SELECT t.OID, t.Val, b.Title, b.Authors\n"
+        "FROM Tags t\n"
+        "JOIN Items i ON i.OID = t.ItemID\n"
+        "LEFT JOIN Books b ON b.OID = i.ParentID\n"
+        "WHERE t.TagID = 104 AND t.OID > %d\n"
+        "LIMIT 5\n"
+        "ORDER BY t.oid DESC",
+        last_imported_index);
+
+	log_message("Selecting quotations...");
+    log_message(query);
+
+	result = sqlite3_exec(db, query, read_quotations_callback, 0, &err_msg);
+	if (result != SQLITE_OK) {
+		snprintf(buffer, sizeof(buffer), "Fail selecting : %s", err_msg);
+		log_message(buffer);
+		goto exit;
+	}
+
+	exit:
+	log_message("All done.");
+	sqlite3_close(db);
+}
+
 static int callback_01(void *not_used, int argc, char **argv, char **col_name){
 	char buffer[128*5];
 	char row_buffer[128];
@@ -323,7 +378,6 @@ static int callback_01(void *not_used, int argc, char **argv, char **col_name){
 	}
 	return 0;
 }
-
 
 static void database_01()
 {
@@ -390,6 +444,8 @@ static int main_handler(int event_type, int param_one, int param_two)
                 // json_02();
 			} else if (step == 1) {
                 theo_server_get_max_import_index();
+            } else if (step == 2) {
+                read_quotations();
             }
 			else {
 				CloseApp();
