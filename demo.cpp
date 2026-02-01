@@ -52,12 +52,12 @@ static void theo_server_health_check()
 		return;
 	}
 
-    std::string url = std::string(THEO_SERVER_API_URL) + "/healthz";
+    const char *url = THEO_SERVER_API_URL "/healthz";
 
     log_message("Health check URL:");
-    log_message(url.c_str());
+    log_message(url);
 
-	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+	curl_easy_setopt(curl, CURLOPT_URL, url);
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, theo_server_health_check_callback);
@@ -101,11 +101,19 @@ static void theo_server_get_max_import_index()
 		return;
 	}
 
-    std::string url = std::string(THEO_SERVER_API_URL) + "/v1/quotations/import-index/max";
+    const char *url = THEO_SERVER_API_URL "/v1/quotations/import-index/max";
     log_message("Theo Server get max import index URL:");
-    log_message(url.c_str());
+    log_message(url);
 
-	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    // Build header list
+    struct curl_slist* headers = nullptr;
+    const char *api_key_header = "X-API-Key: " THEO_SERVER_API_KEY;
+    headers = curl_slist_append(headers, api_key_header);
+    log_message("Using header:");
+    log_message(api_key_header);
+
+	curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, theo_server_get_max_import_index_callback);
@@ -114,14 +122,11 @@ static void theo_server_get_max_import_index()
 	if (res != CURLE_OK) {
 		snprintf(buffer, sizeof(buffer), "Error %d : %s", res, curl_easy_strerror(res));
 		log_message(buffer);
-
-		goto end;
-	}
-
-	end:
+	} else {
+    	log_message("Theo Server max index received.");
+    }
+    curl_slist_free_all(headers);
 	curl_easy_cleanup(curl);
-
-	log_message("Theo Server max index received.");
 }
 
 
