@@ -1,36 +1,129 @@
-#include "inkview.h"
+    #include "inkview.h"
+#include "sqlite3.h"
 
-static const int kFontSize = 42;
+
+// e:\system\profiles\default\config\books.db
+
+#define DB_FILE USERDATA TEMPDIR "/demo07.sqlite3"
+
+#define BOOKS_DB_FILE "/mnt/ext1/system/profiles/default/config/books.db"
+
+
+static ifont *font;
+static const int kFontSize = 16;
+static int y_log;
+
+static void log_message(const char *msg)
+{
+	if (strlen(msg) == 0) {
+		return;
+	}
+	DrawTextRect(0, y_log, ScreenWidth(), kFontSize, msg, ALIGN_LEFT);
+	PartialUpdate(0, y_log, ScreenWidth(), y_log + kFontSize + 2);
+	y_log += kFontSize + 10;
+}
+
+static int callback_01(void *not_used, int argc, char **argv, char **col_name){
+	char buffer[128*5];
+	char row_buffer[128];
+
+	strcpy(buffer, " > ");
+	for(int i=0; i<argc && i<5 ; i++) {
+		snprintf(row_buffer, sizeof(row_buffer), "%s=%s, ", col_name[i], argv[i] ? argv[i] : "NULL");
+		strcat(buffer, row_buffer);
+	}
+
+	if (strlen(buffer) > 3) {
+		log_message(buffer);
+	}
+	return 0;
+}
+
+
+static void database_01()
+{
+	char buffer[2048];
+
+	sqlite3 *db;
+	int result;
+	char *err_msg;
+
+	// Ensure the DB doesn't already exist
+	// iv_unlink(DB_FILE);
+
+	result = sqlite3_open(BOOKS_DB_FILE, &db);
+	if (result) {
+		snprintf(buffer, sizeof(buffer), "Fail opening DB : %s", sqlite3_errmsg(db));
+		log_message(buffer);
+		goto exit;
+	}
+
+	log_message("Select...");
+	result = sqlite3_exec(db, "select * from tags limit 10", callback_01, 0, &err_msg);
+	if (result != SQLITE_OK) {
+		snprintf(buffer, sizeof(buffer), "Fail selecting : %s", err_msg);
+		log_message(buffer);
+		goto exit;
+	}
+
+	exit:
+	log_message("All done.");
+	sqlite3_close(db);
+}
+
 
 static int main_handler(int event_type, int param_one, int param_two)
 {
-    if (EVT_INIT == event_type) {
-        ifont *font = OpenFont("LiberationSans", kFontSize, 0);
+	int result = 0;
 
-        ClearScreen();
+	static int step = 0;
 
-        // Everything here is done to a buffer
-        SetFont(font, BLACK);
-        DrawLine(0, 25, ScreenWidth(), 25, 0x00333333);
-        DrawLine(0, ScreenHeight() - 25, ScreenWidth(), ScreenHeight() - 25, 0x00666666);
-        FillArea(50, 250, ScreenWidth() - 50*2, ScreenHeight() - 250*2, 0x00E0E0E0);
-        FillArea(100, 300, ScreenWidth() - 100*2, ScreenHeight() - 300*2, 0x00A0A0A0);
-        DrawTextRect(0, ScreenHeight()/2 - kFontSize/2, ScreenWidth(), kFontSize, "Hello, Konstantin!", ALIGN_CENTER);
+	switch (event_type) {
+	case EVT_INIT:
+		font = OpenFont("LiberationSans", 16, 1);
+		SetFont(font, BLACK);
+		y_log = 0;
+		ClearScreen();
+		FullUpdate();
+		break;
+	case EVT_SHOW:
 
-        // Copies the buffer to the real screen
-        FullUpdate();
+		break;
+	case EVT_KEYPRESS:
+		if (param_one == IV_KEY_PREV) {
+			CloseApp();
+			return 1;
+		}
+		else if (param_one == IV_KEY_NEXT) {
+            log_message("Starting...");
+			//*
+			if (step == 0) {
+				database_01();
+			}
+			else {
+				CloseApp();
+			}
+			//*/
 
-        CloseFont(font);
-    }
-    else if (EVT_KEYPRESS == event_type) {
-        CloseApp();
-    }
-    return 0;
+			step++;
+			return 1;
+		}
+
+		break;
+	case EVT_EXIT:
+		CloseFont(font);
+		break;
+	default:
+		break;
+	}
+
+    return result;
 }
 
 
 int main (int argc, char* argv[])
 {
     InkViewMain(main_handler);
+
     return 0;
 }

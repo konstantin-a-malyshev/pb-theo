@@ -1,0 +1,1 @@
+cp .\build\demo e:\applications\demo.app
