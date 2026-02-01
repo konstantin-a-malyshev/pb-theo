@@ -3,6 +3,7 @@
 #include "curl/curl.h"
 #include <math.h>
 #include <string>
+#include <limits>
 #include "json-c/json.h"
 #include "theo_server.h"
 
@@ -16,6 +17,8 @@
 static ifont *font;
 static const int kFontSize = 16;
 static int y_log;
+
+static int last_imported_index = std::numeric_limits<int>::max();
 
 static void log_message(const char *msg)
 {
@@ -112,25 +115,28 @@ static size_t theo_server_get_max_import_index_callback(char *ptr, size_t size, 
     log_message("Content received:");
 	log_message(buffer);
 
-	json_object *obj = json_tokener_parse(buffer);
+	json_object *root = json_tokener_parse(buffer);
 
-    char json_buffer[2048];
-
-	snprintf(json_buffer, sizeof(json_buffer), "type=%d (%s)", json_object_get_type(obj), json_type_to_name(json_object_get_type(obj)));
-	log_message(json_buffer);
-
-	if (json_object_get_type(obj) == json_type_object) {
-		json_object_object_foreach(obj, key, val) {
-			json_type type = json_object_get_type(val);
-			if (type == json_type_int) {
-				snprintf(json_buffer, sizeof(buffer), "  > %s :: type=%d (%s) -> %d", key, type, json_type_to_name(type), json_object_get_int(val));
-			}
-			else if (type == json_type_string) {
-				snprintf(json_buffer, sizeof(buffer), "  > %s :: type=%d (%s) -> %s", key, type, json_type_to_name(type), json_object_get_string(val));
-			}
-			// ... here, deal with the other types of data ; including array and object (recursive ;-) )
-			log_message(json_buffer);
-		}
+	if (json_object_get_type(root) != json_type_object) {
+        log_message("Error: root is not an object!");
+        json_object_put(root);  // free root
+    } else {
+        struct json_object *max_id_obj = NULL;
+        if (!json_object_object_get_ex(root, "maxImportIndex", &max_id_obj)) {
+            log_message("Error: `maxImportIndex` not found!");
+            json_object_put(root);  // free root
+        } else {
+            // Ensure it is an integer and read it
+            if (json_object_get_type(max_id_obj) != json_type_int) {
+                log_message("Error: `maxImportIndex` is not an integer!");
+                json_object_put(root);
+            } else {
+                last_imported_index = json_object_get_int(max_id_obj);
+                log_message("Max Import Index:");
+                log_message(std::to_string(last_imported_index).c_str());
+                json_object_put(root);
+            }
+        }
 	}
 
 	// Even if we didn't display everything, we signal the system we used all received data
