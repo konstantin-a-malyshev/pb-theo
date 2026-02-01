@@ -27,6 +27,32 @@ static void log_message(const char *msg)
 	y_log += kFontSize + 10;
 }
 
+static void check_internet(void)
+{
+    log_message("Checking internet connectivity...");
+	char buffer[2048];
+
+	const char *url = "http://checkip.amazonaws.com/";
+	int retsize;
+	char *cookie = NULL;
+	char *post = NULL;
+
+	snprintf(buffer, sizeof(buffer), "HTTP Request to %s", url);
+	log_message(buffer);
+
+	void *result = QuickDownloadExt(url, &retsize, 15, cookie, post);
+
+	snprintf(buffer, sizeof(buffer), "Response size: %d", retsize);
+	log_message(buffer);
+
+	log_message("Response content:");
+	snprintf(buffer, sizeof(buffer), "Response content: %.1024s", (char *)result);
+	log_message(buffer);
+
+	free(result);
+    log_message("Internet connectivity checked.");
+}
+
 static size_t theo_server_health_check_callback(char *ptr, size_t size, size_t nmemb, void *userdata)
 {
 	// Warning: the received data it not NUL-terminated
@@ -82,8 +108,30 @@ static size_t theo_server_get_max_import_index_callback(char *ptr, size_t size, 
 	char buffer[1024];
 
 	int data_size = size * nmemb;
-	snprintf(buffer, sizeof(buffer), "  Data %d bytes : %.128s", data_size, ptr);
+	snprintf(buffer, sizeof(buffer), "%s", ptr);
+    log_message("Content received:");
 	log_message(buffer);
+
+	json_object *obj = json_tokener_parse(buffer);
+
+    char json_buffer[2048];
+
+	snprintf(json_buffer, sizeof(json_buffer), "type=%d (%s)", json_object_get_type(obj), json_type_to_name(json_object_get_type(obj)));
+	log_message(json_buffer);
+
+	if (json_object_get_type(obj) == json_type_object) {
+		json_object_object_foreach(obj, key, val) {
+			json_type type = json_object_get_type(val);
+			if (type == json_type_int) {
+				snprintf(json_buffer, sizeof(buffer), "  > %s :: type=%d (%s) -> %d", key, type, json_type_to_name(type), json_object_get_int(val));
+			}
+			else if (type == json_type_string) {
+				snprintf(json_buffer, sizeof(buffer), "  > %s :: type=%d (%s) -> %s", key, type, json_type_to_name(type), json_object_get_string(val));
+			}
+			// ... here, deal with the other types of data ; including array and object (recursive ;-) )
+			log_message(json_buffer);
+		}
+	}
 
 	// Even if we didn't display everything, we signal the system we used all received data
 	return data_size;
@@ -328,6 +376,7 @@ static int main_handler(int event_type, int param_one, int param_two)
 		else if (param_one == IV_KEY_NEXT) {
 			//*
 			if (step == 0) {
+                check_internet();
                 theo_server_health_check();
 				// database_01();
                 // http_request_03();
