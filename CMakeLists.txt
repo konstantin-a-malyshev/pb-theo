@@ -20,4 +20,4 @@ include_directories("${FREETYPE_INCLUDE_DIRS}")
 
 # Start you CMakeLists.txt here...
 add_executable(demo demo.cpp)
-target_link_libraries(demo inkview sqlite3)
+target_link_libraries(demo inkview sqlite3 curl)

@@ -1,5 +1,7 @@
-    #include "inkview.h"
+#include "inkview.h"
 #include "sqlite3.h"
+#include "curl/curl.h"
+#include <math.h>
 
 
 // e:\system\profiles\default\config\books.db
@@ -21,6 +23,67 @@ static void log_message(const char *msg)
 	DrawTextRect(0, y_log, ScreenWidth(), kFontSize, msg, ALIGN_LEFT);
 	PartialUpdate(0, y_log, ScreenWidth(), y_log + kFontSize + 2);
 	y_log += kFontSize + 10;
+}
+
+static size_t curl_03_header_callback(char *ptr, size_t size, size_t nitems, void *userdata)
+{
+	char buffer[1024];
+
+	int data_size = size * nitems;
+	snprintf(buffer, sizeof(buffer), "  Header : %d bytes : %.128s", data_size, ptr);
+	log_message(buffer);
+
+	return data_size;
+}
+
+static size_t curl_03_write_callback(char *ptr, size_t size, size_t nmemb, void *userdata)
+{
+	// Warning: the received data it not NUL-terminated
+	char buffer[1024];
+
+	int data_size = size * nmemb;
+	snprintf(buffer, sizeof(buffer), "  Data %d bytes : %.128s", data_size, ptr);
+	log_message(buffer);
+
+	// Even if we didn't display everything, we signal the system we used all received data
+	return data_size;
+}
+
+static void http_request_03()
+{
+	char buffer[2048];
+
+	log_message("Start 3rd try (curl).");
+
+	CURL *curl = curl_easy_init();
+	if (!curl) {
+		log_message("Failed initializing curl");
+		return;
+	}
+
+	const char *url = "http://checkip.amazonaws.com/";
+	//const char *url = "https://blog.pascal-martin.fr/post/directives-ini-c-est-le-mal.html";
+	//const char *url = "http://bit.ly/2bPtNry";
+
+	curl_easy_setopt(curl, CURLOPT_URL, url);
+	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
+
+	curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, curl_03_header_callback);
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_03_write_callback);
+
+	CURLcode res = curl_easy_perform(curl);
+	if (res != CURLE_OK) {
+		snprintf(buffer, sizeof(buffer), "Error %d : %s", res, curl_easy_strerror(res));
+		log_message(buffer);
+
+		goto end;
+	}
+
+	end:
+	curl_easy_cleanup(curl);
+
+	log_message("End 3rd try (curl).");
 }
 
 static int callback_01(void *not_used, int argc, char **argv, char **col_name){
@@ -99,6 +162,7 @@ static int main_handler(int event_type, int param_one, int param_two)
 			//*
 			if (step == 0) {
 				database_01();
+                http_request_03();
 			}
 			else {
 				CloseApp();
