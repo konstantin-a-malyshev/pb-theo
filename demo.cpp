@@ -17,6 +17,10 @@
 static ifont *font;
 static const int kFontSize = 16;
 static int y_log;
+static int quotations_sent = 0;
+static int quotations_imported = 0;
+static int quotations_conflicted = 0;
+static int quotations_failed = 0;
 
 static int last_imported_index = std::numeric_limits<int>::max();
 
@@ -28,6 +32,16 @@ static void log_message(const char *msg)
 	DrawTextRect(0, y_log, ScreenWidth(), kFontSize, msg, ALIGN_LEFT);
 	PartialUpdate(0, y_log, ScreenWidth(), y_log + kFontSize + 2);
 	y_log += kFontSize + 10;
+}
+
+static void log_message_no_newline(const char *msg)
+{
+	if (strlen(msg) == 0) {
+		return;
+	}
+	FillArea(0, y_log, ScreenWidth(), kFontSize, WHITE);
+	DrawTextRect(0, y_log, ScreenWidth(), kFontSize, msg, ALIGN_LEFT);
+	PartialUpdate(0, y_log, ScreenWidth(), y_log + kFontSize + 2);
 }
 
 static void check_internet(void)
@@ -315,7 +329,7 @@ static size_t theo_server_post_quotation_callback(char *ptr, size_t size, size_t
 
 	int data_size = size * nmemb;
 	snprintf(buffer, sizeof(buffer), "  Data %d bytes : %.128s", data_size, ptr);
-	log_message(buffer);
+	// log_message(buffer);
 
 	// Even if we didn't display everything, we signal the system we used all received data
 	return data_size;
@@ -325,8 +339,6 @@ static int theo_server_post_quotation(const char *quotation_json_string)
 {
 	char buffer[2048];
 
-	log_message("Posting quotation to Theo Server...");
-
 	CURL *curl = curl_easy_init();
 	if (!curl) {
 		log_message("Failed initializing curl");
@@ -334,8 +346,6 @@ static int theo_server_post_quotation(const char *quotation_json_string)
 	}
 
 	const char *url = THEO_SERVER_API_URL "/v1/quotations/import";
-	log_message("Theo Server post quotation URL:");
-	log_message(url);
 
 	// Build header list
 	struct curl_slist* headers = nullptr;
@@ -343,12 +353,6 @@ static int theo_server_post_quotation(const char *quotation_json_string)
 	const char *content_type_header = "Content-Type: application/json";
 	headers = curl_slist_append(headers, api_key_header);
 	headers = curl_slist_append(headers, content_type_header);
-	log_message("Using headers:");
-	log_message(api_key_header);
-	log_message(content_type_header);
-
-	log_message("Body: ");
-	log_message(quotation_json_string);
 
 	curl_easy_setopt(curl, CURLOPT_URL, url);
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
@@ -359,12 +363,20 @@ static int theo_server_post_quotation(const char *quotation_json_string)
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, theo_server_post_quotation_callback);
 
 	CURLcode res = curl_easy_perform(curl);
+	quotations_sent++;
 
 	long response_code = 0;
 	if (res == CURLE_OK) {
 		curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
-		log_message("Response code:");
-		log_message(std::to_string(response_code).c_str());
+		if(response_code == 201) {
+			quotations_imported++;
+		} else if (response_code == 409) {
+			quotations_conflicted++;
+		} else {
+			quotations_failed++;
+			snprintf(buffer, sizeof(buffer), "Failed sending quotation. HTTP Response code: %ld", response_code);
+			log_message(buffer);
+		}
 	} else {
 		snprintf(buffer, sizeof(buffer), "Error %d : %s", res, curl_easy_strerror(res));
 		log_message(buffer);
@@ -373,7 +385,8 @@ static int theo_server_post_quotation(const char *quotation_json_string)
 		return 1;
 	}
 
-	log_message("Quotation posted to Theo Server.");
+	snprintf(buffer, sizeof(buffer), "Quotations sent: %d, imported: %d, conflicted: %d, failed: %d.", quotations_sent, quotations_imported, quotations_conflicted, quotations_failed);
+	log_message_no_newline(buffer);
 
 	curl_slist_free_all(headers);
 	curl_easy_cleanup(curl);
@@ -400,10 +413,6 @@ static int read_quotations_callback(void *not_used, int argc, char **argv, char 
     char *json = argv[1];
     char *book = argv[2];
 
-    log_message(oid);
-    log_message(json);
-    log_message(book);
-
 	struct json_object *root = json_tokener_parse(json);
     if (!root || !json_object_is_type(root, json_type_object)) {
 		log_message("Error: Tag Value parse error!");
@@ -422,8 +431,6 @@ static int read_quotations_callback(void *not_used, int argc, char **argv, char 
 			log_message("Quotation Begin: NULL");
 		    json_object_put(root); // free
 			return 1;
-		} else {
-			log_message(begin);
 		}
 
 		const char *end = json_get_string_property(root, "end");
@@ -433,18 +440,8 @@ static int read_quotations_callback(void *not_used, int argc, char **argv, char 
 			return 1;
 		}
 
-		log_message("Quotation:");
-		log_message(begin);
-		log_message(end);
-		log_message(text);
-
 		std::string caption = std::string(book) + " (OID: " + std::string(oid) + ")";
-		log_message("Caption:");
-		log_message(caption.c_str());
-
 		std::string position = std::string(begin) + " - " + std::string(end);
-		log_message("Position:");
-		log_message(position.c_str());
 
 		// create JSON object to send to Theo Server
 		json_object *quotation_obj = json_object_new_object();
@@ -456,8 +453,6 @@ static int read_quotations_callback(void *not_used, int argc, char **argv, char 
 		json_object_object_add(quotation_obj, "status", json_object_new_string("new"));
 
 		const char *quotation_json_string = json_object_to_json_string(quotation_obj);
-		log_message("Quotation JSON to send:");
-		log_message(quotation_json_string);	
 
 		// send POST request to theo server to /v1/quotations/import
 		theo_server_post_quotation(quotation_json_string);		
@@ -492,7 +487,7 @@ static void read_quotations() {
         "LEFT JOIN Books b ON b.OID = i.ParentID\n"
         "WHERE t.TagID = 104 AND t.OID > %d\n"
         "ORDER BY t.oid DESC\n"
-		"LIMIT 1"
+		// "LIMIT 1"
 		";",
         last_imported_index);
 
@@ -572,10 +567,9 @@ static int main_handler(int event_type, int param_one, int param_two)
 		y_log = 0;
 		ClearScreen();
 		FullUpdate();
-		log_message("Press NEXT to start...");
 		break;
 	case EVT_SHOW:
-
+		log_message("Press NEXT to start...");
 		break;
 	case EVT_KEYPRESS:
 		if (param_one == IV_KEY_PREV) {
