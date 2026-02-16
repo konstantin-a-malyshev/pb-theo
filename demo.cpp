@@ -199,6 +199,7 @@ static int theo_server_post_quotation(const char *quotation_json_string)
 
 	CURL *curl = curl_easy_init();
 	if (!curl) {
+		log_message("");
 		log_message("Failed initializing curl");
 		return 1;
 	}
@@ -233,10 +234,12 @@ static int theo_server_post_quotation(const char *quotation_json_string)
 		} else {
 			quotations_failed++;
 			snprintf(buffer, sizeof(buffer), "Failed sending quotation. HTTP Response code: %ld", response_code);
+			log_message("");
 			log_message(buffer);
 		}
 	} else {
 		snprintf(buffer, sizeof(buffer), "Error %d : %s", res, curl_easy_strerror(res));
+		log_message("");
 		log_message(buffer);
 		curl_slist_free_all(headers);
 		curl_easy_cleanup(curl);
