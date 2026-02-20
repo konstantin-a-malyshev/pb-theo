@@ -195,6 +195,11 @@ static size_t theo_server_post_quotation_callback(char *ptr, size_t size, size_t
 
 static int theo_server_post_quotation(const char *quotation_json_string)
 {
+	if (quotations_failed > 0) {
+		// Skipping sending more quotations since we already have a failure
+		return 1;
+	}
+
 	char buffer[2048];
 
 	CURL *curl = curl_easy_init();
@@ -236,6 +241,7 @@ static int theo_server_post_quotation(const char *quotation_json_string)
 			snprintf(buffer, sizeof(buffer), "Failed sending quotation. HTTP Response code: %ld", response_code);
 			log_message("");
 			log_message(buffer);
+			return 1;
 		}
 	} else {
 		snprintf(buffer, sizeof(buffer), "Error %d : %s", res, curl_easy_strerror(res));
@@ -353,7 +359,7 @@ static void read_quotations() {
         "FROM Tags t\n"
         "JOIN Items i ON i.OID = t.ItemID\n"
         "LEFT JOIN Books b ON b.OID = i.ParentID\n"
-        "WHERE t.TagID = 104 AND t.OID > %d\n"
+        "WHERE t.TagID = 104 AND i.State = 0 AND t.OID > %d\n"
         "ORDER BY t.oid ASC\n"
 		// "LIMIT 1"
 		";",

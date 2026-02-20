@@ -48,6 +48,12 @@ docker run --rm -it `
     5keeve/pocketbook-sdk:6.3.0-b288-v1
 ```
 
+or
+
+```powershell
+.\docker.ps1
+```
+
 This will start a bash where you can run your compilation.
 
 ## Build your own image
